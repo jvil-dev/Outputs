@@ -17,6 +17,12 @@ const AudioEngine = (() => {
   let _activeA = [];
   let _activeB = [];
 
+  // Per-output delay in seconds (for Bluetooth latency compensation)
+  let _delayA = 0;
+  let _delayB = 0;
+  let _delayNodeA = null;
+  let _delayNodeB = null;
+
   let _playing = false;
   let _startTime = 0;
   let _offset = 0;
@@ -113,8 +119,15 @@ const AudioEngine = (() => {
   }
 
   function _buildSourcesForContext(ctx, outputKey) {
-    if (!ctx) return [];
+    if (!ctx) return { nodes: [], delayNode: null };
     const nodes = [];
+    const delaySec = outputKey === 'a' ? _delayA : _delayB;
+
+    // Create a shared delay node for this output
+    // Max delay 500ms — enough for any Bluetooth codec
+    const delayNode = ctx.createDelay(0.5);
+    delayNode.delayTime.value = delaySec;
+    delayNode.connect(ctx.destination);
 
     for (const { streamIndex, audioBuffer } of _streams) {
       const route = _routing[streamIndex];
@@ -123,21 +136,24 @@ const AudioEngine = (() => {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      // Connect through a gain node for mixing
       const gain = ctx.createGain();
       gain.gain.value = 1;
       source.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(delayNode);
 
       nodes.push({ source, gain });
     }
 
-    return nodes;
+    return { nodes, delayNode };
   }
 
   async function _rebuildAndPlay() {
-    _activeA = _buildSourcesForContext(_ctxA, 'a');
-    _activeB = _buildSourcesForContext(_ctxB, 'b');
+    const resultA = _buildSourcesForContext(_ctxA, 'a');
+    const resultB = _buildSourcesForContext(_ctxB, 'b');
+    _activeA = resultA.nodes;
+    _activeB = resultB.nodes;
+    _delayNodeA = resultA.delayNode;
+    _delayNodeB = resultB.delayNode;
 
     if (_ctxA && _ctxA.state === 'suspended') await _ctxA.resume();
     if (_ctxB && _ctxB.state === 'suspended') await _ctxB.resume();
@@ -191,6 +207,8 @@ const AudioEngine = (() => {
       node.source.disconnect();
       node.gain.disconnect();
     }
+    if (_delayNodeA) { _delayNodeA.disconnect(); _delayNodeA = null; }
+    if (_delayNodeB) { _delayNodeB.disconnect(); _delayNodeB = null; }
     _activeA = [];
     _activeB = [];
     _playing = false;
@@ -229,6 +247,19 @@ const AudioEngine = (() => {
     return _streams.length > 0;
   }
 
+  function setDelayA(seconds) {
+    _delayA = seconds;
+    if (_delayNodeA) _delayNodeA.delayTime.value = seconds;
+  }
+
+  function setDelayB(seconds) {
+    _delayB = seconds;
+    if (_delayNodeB) _delayNodeB.delayTime.value = seconds;
+  }
+
+  function getDelayA() { return _delayA; }
+  function getDelayB() { return _delayB; }
+
   function onEnded(cb) {
     _onEndedCallback = cb;
   }
@@ -247,6 +278,10 @@ const AudioEngine = (() => {
     getDuration,
     isPlaying,
     hasStreams,
+    setDelayA,
+    setDelayB,
+    getDelayA,
+    getDelayB,
     onEnded,
   };
 })();

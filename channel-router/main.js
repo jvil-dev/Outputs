@@ -87,15 +87,15 @@ ipcMain.handle('probe-file', async (_event, filePath) => {
 // IPC: Open file dialog
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Media Files', extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'mp4', 'mkv', 'mov', 'avi', 'webm', 'm4a'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
 
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
+  if (result.canceled || result.filePaths.length === 0) return [];
+  return result.filePaths;
 });
 
 // IPC: Read file as ArrayBuffer

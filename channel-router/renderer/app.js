@@ -1,5 +1,5 @@
 /**
- * UI orchestration — file loading, transport, channel routing, video sync.
+ * UI orchestration — file loading, transport, stream routing, video sync, playlist.
  */
 (() => {
   // ---- DOM refs ----
@@ -9,14 +9,20 @@
   const btnPlay = document.getElementById('btn-play');
   const btnRestart = document.getElementById('btn-restart');
   const btnEnd = document.getElementById('btn-end');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
   const seekBar = document.getElementById('seek-bar');
   const timeDisplay = document.getElementById('time-display');
   const outputA = document.getElementById('output-a');
   const outputB = document.getElementById('output-b');
   const channelList = document.getElementById('channel-list');
   const statusBar = document.getElementById('status-bar');
-  const streamPicker = document.getElementById('stream-picker');
-  const audioStreamSelect = document.getElementById('audio-stream');
+  const delaySliderA = document.getElementById('delay-a');
+  const delayValueA = document.getElementById('delay-a-value');
+  const delaySliderB = document.getElementById('delay-b');
+  const delayValueB = document.getElementById('delay-b-value');
+  const playlistItems = document.getElementById('playlist-items');
+  const btnClearPlaylist = document.getElementById('btn-clear-playlist');
 
   const PLAY_SYMBOL = '\u25B6';
   const PAUSE_SYMBOL = '\u23F8';
@@ -25,6 +31,10 @@
   let currentFilePath = null;
   let animFrameId = null;
   let isSeeking = false;
+
+  // ---- Playlist state ----
+  let playlist = [];       // [{ path, name }]
+  let playlistIndex = -1;  // currently playing index
 
   // ---- Helpers ----
   function setStatus(msg, isError = false) {
@@ -39,28 +49,8 @@
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  // ---- Channel layout labels ----
-  const CHANNEL_LABELS = {
-    'mono': ['Mono'],
-    'stereo': ['L', 'R'],
-    '2.1': ['L', 'R', 'LFE'],
-    '3.0': ['L', 'R', 'C'],
-    '4.0': ['L', 'R', 'SL', 'SR'],
-    'quad': ['FL', 'FR', 'BL', 'BR'],
-    '5.0': ['L', 'R', 'C', 'SL', 'SR'],
-    '5.1': ['L', 'R', 'C', 'LFE', 'SL', 'SR'],
-    '5.1(side)': ['L', 'R', 'C', 'LFE', 'SL', 'SR'],
-    '7.1': ['L', 'R', 'C', 'LFE', 'BL', 'BR', 'SL', 'SR'],
-  };
-
-  function getChannelLabel(index, layout, total) {
-    if (layout && CHANNEL_LABELS[layout]) {
-      return CHANNEL_LABELS[layout][index] || `Ch ${index + 1}`;
-    }
-    if (total === 1) return 'Mono';
-    if (total === 2) return index === 0 ? 'L' : 'R';
-    if (total === 6) return (['L', 'R', 'C', 'LFE', 'SL', 'SR'])[index] || `Ch ${index + 1}`;
-    return `Ch ${index + 1}`;
+  function basename(filePath) {
+    return filePath.split('/').pop().split('\\').pop();
   }
 
   // ---- Device dropdown helpers ----
@@ -88,9 +78,142 @@
     }
   }
 
+  // ---- Playlist management ----
+  function addToPlaylist(filePaths) {
+    for (const p of filePaths) {
+      // Avoid duplicates
+      if (!playlist.some(item => item.path === p)) {
+        playlist.push({ path: p, name: basename(p) });
+      }
+    }
+    renderPlaylist();
+    // If nothing is playing, load the first new item
+    if (playlistIndex === -1 && playlist.length > 0) {
+      playlistIndex = 0;
+      loadCurrentTrack();
+    }
+  }
+
+  function removeFromPlaylist(index) {
+    const wasActive = index === playlistIndex;
+    playlist.splice(index, 1);
+
+    if (playlist.length === 0) {
+      playlistIndex = -1;
+      AudioEngine.pause();
+      AudioEngine.clearStreams();
+      channelList.textContent = '';
+      videoContainer.classList.add('hidden');
+      btnPlay.textContent = PLAY_SYMBOL;
+      seekBar.value = 0;
+      updateTimeDisplay();
+      setStatus('Ready');
+    } else if (wasActive) {
+      // Load the item now at this index (or last item if we removed the tail)
+      playlistIndex = Math.min(index, playlist.length - 1);
+      loadCurrentTrack();
+    } else if (index < playlistIndex) {
+      playlistIndex--;
+    }
+    renderPlaylist();
+  }
+
+  function clearPlaylist() {
+    playlist = [];
+    playlistIndex = -1;
+    AudioEngine.pause();
+    AudioEngine.clearStreams();
+    channelList.textContent = '';
+    videoContainer.classList.add('hidden');
+    btnPlay.textContent = PLAY_SYMBOL;
+    seekBar.value = 0;
+    updateTimeDisplay();
+    renderPlaylist();
+    setStatus('Ready');
+  }
+
+  function renderPlaylist() {
+    playlistItems.textContent = '';
+    playlist.forEach((item, i) => {
+      const row = document.createElement('div');
+      row.className = 'playlist-item' + (i === playlistIndex ? ' active' : '');
+
+      const idx = document.createElement('span');
+      idx.className = 'pl-index';
+      idx.textContent = String(i + 1);
+
+      const name = document.createElement('span');
+      name.className = 'pl-name';
+      name.textContent = item.name;
+      name.title = item.path;
+
+      const remove = document.createElement('button');
+      remove.className = 'pl-remove';
+      remove.textContent = '\u00D7';
+      remove.title = 'Remove';
+      remove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeFromPlaylist(i);
+      });
+
+      row.appendChild(idx);
+      row.appendChild(name);
+      row.appendChild(remove);
+
+      row.addEventListener('click', () => {
+        if (i !== playlistIndex) {
+          playlistIndex = i;
+          loadCurrentTrack();
+          renderPlaylist();
+        }
+      });
+
+      playlistItems.appendChild(row);
+    });
+  }
+
+  async function loadCurrentTrack() {
+    if (playlistIndex < 0 || playlistIndex >= playlist.length) return;
+    await loadFile(playlist[playlistIndex].path);
+    renderPlaylist();
+  }
+
+  function playNext() {
+    if (playlistIndex < playlist.length - 1) {
+      playlistIndex++;
+      loadCurrentTrack().then(() => {
+        AudioEngine.play();
+        btnPlay.textContent = PAUSE_SYMBOL;
+        startAnimLoop();
+      });
+    }
+  }
+
+  function playPrev() {
+    // If more than 3s into the track, restart it; otherwise go to previous
+    if (AudioEngine.getCurrentTime() > 3 && AudioEngine.hasStreams()) {
+      AudioEngine.seek(0);
+      seekBar.value = 0;
+      updateTimeDisplay();
+      syncVideoToAudio();
+      return;
+    }
+    if (playlistIndex > 0) {
+      playlistIndex--;
+      loadCurrentTrack().then(() => {
+        AudioEngine.play();
+        btnPlay.textContent = PAUSE_SYMBOL;
+        startAnimLoop();
+      });
+    }
+  }
+
   // ---- File loading ----
   async function loadFile(filePath) {
     try {
+      AudioEngine.pause();
+      btnPlay.textContent = PLAY_SYMBOL;
+
       setStatus('Probing file...');
       fileMetadata = await window.electronAPI.probeFile(filePath);
       currentFilePath = filePath;
@@ -105,23 +228,30 @@
         videoPlayer.removeAttribute('src');
       }
 
-      // Populate audio stream picker
+      // Extract and decode all audio streams
+      AudioEngine.clearStreams();
       const streams = fileMetadata.audioStreams;
-      audioStreamSelect.textContent = '';
-      streams.forEach((s, i) => {
-        const label = buildStreamLabel(s, i);
-        const opt = new Option(label, String(s.index));
-        audioStreamSelect.appendChild(opt);
-      });
+      const streamInfos = [];
 
-      if (streams.length > 1) {
-        streamPicker.classList.remove('hidden');
-      } else {
-        streamPicker.classList.add('hidden');
+      for (let i = 0; i < streams.length; i++) {
+        const s = streams[i];
+        setStatus(`Extracting stream ${i + 1}/${streams.length}: ${s.codec} ${s.channels}ch...`);
+        const arrayBuffer = await window.electronAPI.extractAudioStream(filePath, s.index);
+        const info = await AudioEngine.addStream(s.index, arrayBuffer);
+        streamInfos.push(info);
       }
 
-      // Load the first audio stream
-      await loadAudioStream(streams[0]);
+      // Build stream routing UI
+      buildStreamUI(streams, streamInfos);
+
+      // Reset transport
+      seekBar.value = 0;
+      updateTimeDisplay();
+
+      const summary = streams.map((s, i) =>
+        `${s.codec.toUpperCase()} ${streamInfos[i].channels}ch`
+      ).join(', ');
+      setStatus(`${fileMetadata.filename} \u2022 ${summary}`);
     } catch (err) {
       setStatus(`Error: ${err.message}`, true);
       console.error(err);
@@ -129,83 +259,56 @@
   }
 
   function buildStreamLabel(stream, idx) {
-    const parts = [`Stream ${idx + 1}: ${stream.codec.toUpperCase()}`];
-    parts.push(`${stream.channels}ch`);
+    const parts = [`Track ${idx + 1}`];
+    parts.push(`${stream.codec.toUpperCase()} ${stream.channels}ch`);
     if (stream.channelLayout) parts.push(`(${stream.channelLayout})`);
     if (stream.language) parts.push(`[${stream.language}]`);
     if (stream.title) parts.push(`\u2014 ${stream.title}`);
     return parts.join(' ');
   }
 
-  async function loadAudioStream(stream) {
-    try {
-      setStatus(`Extracting stream: ${stream.codec} ${stream.channels}ch...`);
-      const arrayBuffer = await window.electronAPI.extractAudioStream(currentFilePath, stream.index);
-
-      setStatus('Decoding audio...');
-      const info = await AudioEngine.loadFile(arrayBuffer);
-
-      // Build channel routing UI
-      buildChannelUI(info.channels, stream.channelLayout);
-
-      // Reset transport
-      seekBar.value = 0;
-      updateTimeDisplay();
-      btnPlay.textContent = PLAY_SYMBOL;
-
-      setStatus(`Ready \u2014 ${fileMetadata.filename} \u2022 ${stream.codec.toUpperCase()} ${info.channels}ch (${Math.round(info.sampleRate / 1000)}kHz)`);
-    } catch (err) {
-      setStatus(`Error: ${err.message}`, true);
-      console.error(err);
-    }
-  }
-
-  function buildChannelUI(numChannels, layout) {
+  function buildStreamUI(streams, streamInfos) {
     channelList.textContent = '';
-    const routing = AudioEngine.getChannelRouting();
+    const routing = AudioEngine.getRouting();
 
-    for (let i = 0; i < numChannels; i++) {
+    for (let i = 0; i < streams.length; i++) {
+      const s = streams[i];
+      const route = routing[s.index] || { a: true, b: false };
+
       const row = document.createElement('div');
       row.className = 'channel-row';
+      row.dataset.streamIndex = String(s.index);
 
       const label = document.createElement('span');
       label.className = 'ch-label';
-      label.textContent = `Ch ${i + 1} (${getChannelLabel(i, layout, numChannels)})`;
+      label.textContent = buildStreamLabel(s, i);
 
       const buttons = document.createElement('div');
       buttons.className = 'ch-buttons';
 
-      const name = `ch-${i}`;
-
       const labelA = document.createElement('label');
-      const radioA = document.createElement('input');
-      radioA.type = 'radio';
-      radioA.name = name;
-      radioA.value = 'a';
-      radioA.checked = routing[i] === 'a';
-      labelA.appendChild(radioA);
+      const cbA = document.createElement('input');
+      cbA.type = 'checkbox';
+      cbA.checked = route.a;
+      labelA.appendChild(cbA);
       labelA.appendChild(document.createTextNode('A'));
-      if (routing[i] === 'a') labelA.classList.add('selected-a');
+      if (route.a) labelA.classList.add('selected-a');
 
       const labelB = document.createElement('label');
-      const radioB = document.createElement('input');
-      radioB.type = 'radio';
-      radioB.name = name;
-      radioB.value = 'b';
-      radioB.checked = routing[i] === 'b';
-      labelB.appendChild(radioB);
+      const cbB = document.createElement('input');
+      cbB.type = 'checkbox';
+      cbB.checked = route.b;
+      labelB.appendChild(cbB);
       labelB.appendChild(document.createTextNode('B'));
-      if (routing[i] === 'b') labelB.classList.add('selected-b');
+      if (route.b) labelB.classList.add('selected-b');
 
-      radioA.addEventListener('change', () => {
-        labelA.classList.add('selected-a');
-        labelB.classList.remove('selected-b');
+      cbA.addEventListener('change', () => {
+        labelA.classList.toggle('selected-a', cbA.checked);
         updateRouting();
       });
 
-      radioB.addEventListener('change', () => {
-        labelB.classList.add('selected-b');
-        labelA.classList.remove('selected-a');
+      cbB.addEventListener('change', () => {
+        labelB.classList.toggle('selected-b', cbB.checked);
         updateRouting();
       });
 
@@ -219,12 +322,13 @@
 
   function updateRouting() {
     const rows = channelList.querySelectorAll('.channel-row');
-    const routing = [];
-    rows.forEach((row) => {
-      const radios = row.querySelectorAll('input[type="radio"]');
-      routing.push(radios[0].checked ? 'a' : 'b');
+    const routing = {};
+    rows.forEach(row => {
+      const idx = parseInt(row.dataset.streamIndex, 10);
+      const cbs = row.querySelectorAll('input[type="checkbox"]');
+      routing[idx] = { a: cbs[0].checked, b: cbs[1].checked };
     });
-    AudioEngine.setChannelRouting(routing);
+    AudioEngine.setRouting(routing);
   }
 
   // ---- Animation loop ----
@@ -267,10 +371,10 @@
 
   // ======== EVENT LISTENERS (registered synchronously) ========
 
-  // Drop zone
+  // Drop zone — now adds to playlist
   dropZone.addEventListener('click', async () => {
-    const filePath = await window.electronAPI.openFileDialog();
-    if (filePath) loadFile(filePath);
+    const filePaths = await window.electronAPI.openFileDialog();
+    if (filePaths && filePaths.length > 0) addToPlaylist(filePaths);
   });
 
   dropZone.addEventListener('dragover', (e) => {
@@ -285,20 +389,27 @@
   dropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) loadFile(file.path);
+    const files = [...e.dataTransfer.files];
+    if (files.length > 0) {
+      addToPlaylist(files.map(f => f.path));
+    }
   });
 
   document.body.addEventListener('dragover', (e) => e.preventDefault());
   document.body.addEventListener('drop', (e) => {
     e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file) loadFile(file.path);
+    const files = [...e.dataTransfer.files];
+    if (files.length > 0) {
+      addToPlaylist(files.map(f => f.path));
+    }
   });
+
+  // Playlist clear
+  btnClearPlaylist.addEventListener('click', clearPlaylist);
 
   // Transport controls
   btnPlay.addEventListener('click', async () => {
-    if (!AudioEngine.getAudioBuffer()) return;
+    if (!AudioEngine.hasStreams()) return;
     if (AudioEngine.isPlaying()) {
       AudioEngine.pause();
       btnPlay.textContent = PLAY_SYMBOL;
@@ -323,6 +434,9 @@
     updateTimeDisplay();
     syncVideoToAudio();
   });
+
+  btnPrev.addEventListener('click', () => playPrev());
+  btnNext.addEventListener('click', () => playNext());
 
   seekBar.addEventListener('input', () => {
     isSeeking = true;
@@ -354,23 +468,45 @@
     }
   });
 
+  // Auto-advance to next track when current ends
   AudioEngine.onEnded(() => {
     btnPlay.textContent = PLAY_SYMBOL;
     seekBar.value = 0;
     updateTimeDisplay();
     cancelAnimationFrame(animFrameId);
+
+    // Auto-advance if there's a next track
+    if (playlistIndex < playlist.length - 1) {
+      playNext();
+    }
   });
 
-  // Audio stream picker
-  audioStreamSelect.addEventListener('change', async () => {
-    if (!fileMetadata) return;
-    const selectedIndex = parseInt(audioStreamSelect.value, 10);
-    const stream = fileMetadata.audioStreams.find(s => s.index === selectedIndex);
-    if (stream) {
-      AudioEngine.pause();
-      btnPlay.textContent = PLAY_SYMBOL;
-      await loadAudioStream(stream);
-    }
+  // Delay sliders
+  const savedDelayA = localStorage.getItem('delayA');
+  const savedDelayB = localStorage.getItem('delayB');
+  if (savedDelayA) {
+    delaySliderA.value = savedDelayA;
+    delayValueA.textContent = `${savedDelayA} ms`;
+    AudioEngine.setDelayA(parseInt(savedDelayA, 10) / 1000);
+  }
+  if (savedDelayB) {
+    delaySliderB.value = savedDelayB;
+    delayValueB.textContent = `${savedDelayB} ms`;
+    AudioEngine.setDelayB(parseInt(savedDelayB, 10) / 1000);
+  }
+
+  delaySliderA.addEventListener('input', () => {
+    const ms = parseInt(delaySliderA.value, 10);
+    delayValueA.textContent = `${ms} ms`;
+    AudioEngine.setDelayA(ms / 1000);
+    localStorage.setItem('delayA', String(ms));
+  });
+
+  delaySliderB.addEventListener('input', () => {
+    const ms = parseInt(delaySliderB.value, 10);
+    delayValueB.textContent = `${ms} ms`;
+    AudioEngine.setDelayB(ms / 1000);
+    localStorage.setItem('delayB', String(ms));
   });
 
   // Output device change
