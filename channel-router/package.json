@@ -1,0 +1,16 @@
+{
+  "name": "channel-router",
+  "version": "1.0.0",
+  "description": "Route audio channels to different output devices",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^35.0.0"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0"
+  }
+}

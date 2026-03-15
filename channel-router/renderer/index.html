@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' file: blob:; script-src 'self'; connect-src 'self' file:">
+  <title>Channel Router</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Channel Router</h1>
+    </header>
+
+    <section id="video-container" class="hidden">
+      <video id="video-player" muted playsinline></video>
+    </section>
+
+    <section id="transport">
+      <div id="transport-controls">
+        <button id="btn-restart" title="Restart">|&laquo;</button>
+        <button id="btn-play" title="Play/Pause">&#9654;</button>
+        <button id="btn-end" title="Go to end">&raquo;|</button>
+      </div>
+      <div id="seek-row">
+        <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1">
+        <span id="time-display">0:00 / 0:00</span>
+      </div>
+    </section>
+
+    <section id="outputs">
+      <div class="output-row">
+        <label for="output-a">Output A:</label>
+        <select id="output-a"><option value="">— select device —</option></select>
+      </div>
+      <div class="output-row">
+        <label for="output-b">Output B:</label>
+        <select id="output-b"><option value="">— select device —</option></select>
+      </div>
+    </section>
+
+    <section id="stream-picker" class="hidden">
+      <div class="output-row">
+        <label for="audio-stream">Audio Stream:</label>
+        <select id="audio-stream"></select>
+      </div>
+    </section>
+
+    <section id="channel-list">
+      <!-- Dynamically populated -->
+    </section>
+
+    <section id="drop-zone" tabindex="0">
+      <p>Drop file here or click to browse</p>
+    </section>
+
+    <div id="status-bar"></div>
+  </div>
+
+  <script src="device-manager.js"></script>
+  <script src="audio-engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
