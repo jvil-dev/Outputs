@@ -1,0 +1,35 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: macOS version and Outputs version or commit
+      placeholder: macOS 15.1, commit abc1234
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: 1. Open file X. 2. Route track 1 to B. 3. Press play.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: devices
+    attributes:
+      label: Output devices involved
+      placeholder: Built-in speakers and AirPods Pro

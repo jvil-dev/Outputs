@@ -1,2 +1,16 @@
-/.claude
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+.build/
+.swiftpm/
+*.dSYM
+
+# Node (legacy/electron)
 node_modules/
+
+# Local tooling
+/.claude
+.vscode/
+.DS_Store
