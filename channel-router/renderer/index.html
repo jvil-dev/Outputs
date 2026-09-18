@@ -18,6 +18,7 @@
 
     <section id="video-container" class="hidden">
       <video id="video-player" muted playsinline></video>
+      <button id="btn-fullscreen" title="Toggle fullscreen">&#x26F6;</button>
     </section>
 
     <section id="transport">
@@ -42,7 +43,7 @@
         </div>
         <div class="delay-row">
           <label>Delay:</label>
-          <input type="range" id="delay-a" min="0" max="500" value="0" step="5">
+          <input type="range" id="delay-a" min="0" max="500" value="0" step="1">
           <span id="delay-a-value">0 ms</span>
         </div>
       </div>
@@ -53,14 +54,30 @@
         </div>
         <div class="delay-row">
           <label>Delay:</label>
-          <input type="range" id="delay-b" min="0" max="500" value="0" step="5">
+          <input type="range" id="delay-b" min="0" max="500" value="0" step="1">
           <span id="delay-b-value">0 ms</span>
         </div>
       </div>
     </section>
 
+    <section id="latency-monitor">
+      <div class="latency-col latency-a">
+        <span class="latency-label">A</span>
+        <span class="latency-value" id="latency-val-a">0ms</span>
+      </div>
+      <div class="latency-delta">
+        <span class="latency-delta-label">&#916;</span>
+        <span class="latency-delta-value" id="latency-delta">0ms</span>
+      </div>
+      <div class="latency-col latency-b">
+        <span class="latency-label">B</span>
+        <span class="latency-value" id="latency-val-b">0ms</span>
+      </div>
+    </section>
+
     <section id="channel-list">
       <!-- Dynamically populated -->
+       
     </section>
 
     <section id="playlist">

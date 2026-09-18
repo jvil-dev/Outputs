@@ -24,6 +24,12 @@
   const playlistItems = document.getElementById('playlist-items');
   const btnClearPlaylist = document.getElementById('btn-clear-playlist');
 
+  const latencyValA = document.getElementById('latency-val-a');
+  const latencyValB = document.getElementById('latency-val-b');
+  const latencyDelta = document.getElementById('latency-delta');
+
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+
   const PLAY_SYMBOL = '\u25B6';
   const PAUSE_SYMBOL = '\u23F8';
 
@@ -453,6 +459,20 @@
     isSeeking = false;
   });
 
+  // Fullscreen toggle
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      videoContainer.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  btnFullscreen.addEventListener('click', toggleFullscreen);
+
+  // Double-click video to toggle fullscreen
+  videoPlayer.addEventListener('dblclick', toggleFullscreen);
+
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       e.preventDefault();
@@ -465,6 +485,8 @@
       const cur = AudioEngine.getCurrentTime();
       AudioEngine.seek(cur + 5);
       syncVideoToAudio();
+    } else if (e.code === 'KeyF' && !videoContainer.classList.contains('hidden')) {
+      toggleFullscreen();
     }
   });
 
@@ -508,6 +530,23 @@
     AudioEngine.setDelayB(ms / 1000);
     localStorage.setItem('delayB', String(ms));
   });
+
+  // Latency monitor — shows user-set delay offsets only
+  function updateLatencyMonitor() {
+    const delayA = AudioEngine.getDelayA() * 1000;
+    const delayB = AudioEngine.getDelayB() * 1000;
+    const delta = Math.abs(delayA - delayB);
+
+    latencyValA.textContent = `${delayA.toFixed(0)}ms`;
+    latencyValB.textContent = `${delayB.toFixed(0)}ms`;
+    latencyDelta.textContent = `${delta.toFixed(0)}ms`;
+    latencyDelta.className = delta < 1
+      ? 'latency-delta-value synced'
+      : 'latency-delta-value offset';
+  }
+
+  delaySliderA.addEventListener('input', updateLatencyMonitor);
+  delaySliderB.addEventListener('input', updateLatencyMonitor);
 
   // Output device change
   outputA.addEventListener('change', async () => {

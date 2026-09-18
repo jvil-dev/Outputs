@@ -1,9 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const { execFile } = require('child_process');
-const ffprobePath = require('ffprobe-static').path;
-const ffmpegPath = require('ffmpeg-static');
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
+const path = require("path");
+const fs = require("fs");
+const { execFile } = require("child_process");
+const ffprobePath = require("ffprobe-static").path;
+const ffmpegPath = require("ffmpeg-static");
 
 let mainWindow;
 
@@ -14,35 +14,37 @@ function createWindow() {
     minWidth: 600,
     minHeight: 500,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
-    titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1a1a2e',
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#1a1a2e",
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
 app.whenReady().then(createWindow);
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
 // IPC: Probe file with ffprobe
-ipcMain.handle('probe-file', async (_event, filePath) => {
+ipcMain.handle("probe-file", async (_event, filePath) => {
   return new Promise((resolve, reject) => {
     const args = [
-      '-v', 'quiet',
-      '-print_format', 'json',
-      '-show_format',
-      '-show_streams',
+      "-v",
+      "quiet",
+      "-print_format",
+      "json",
+      "-show_format",
+      "-show_streams",
       filePath,
     ];
 
@@ -54,7 +56,7 @@ ipcMain.handle('probe-file', async (_event, filePath) => {
       try {
         const data = JSON.parse(stdout);
         const audioStreams = data.streams
-          .filter(s => s.codec_type === 'audio')
+          .filter((s) => s.codec_type === "audio")
           .map((s, i) => ({
             index: s.index,
             channels: s.channels,
@@ -64,10 +66,10 @@ ipcMain.handle('probe-file', async (_event, filePath) => {
             language: (s.tags && s.tags.language) || null,
             title: (s.tags && s.tags.title) || null,
           }));
-        const videoStream = data.streams.find(s => s.codec_type === 'video');
+        const videoStream = data.streams.find((s) => s.codec_type === "video");
 
         if (audioStreams.length === 0) {
-          reject(new Error('No audio stream found in file'));
+          reject(new Error("No audio stream found in file"));
           return;
         }
 
@@ -78,19 +80,36 @@ ipcMain.handle('probe-file', async (_event, filePath) => {
           filename: path.basename(filePath),
         });
       } catch (parseErr) {
-        reject(new Error(`Failed to parse ffprobe output: ${parseErr.message}`));
+        reject(
+          new Error(`Failed to parse ffprobe output: ${parseErr.message}`),
+        );
       }
     });
   });
 });
 
 // IPC: Open file dialog
-ipcMain.handle('open-file-dialog', async () => {
+ipcMain.handle("open-file-dialog", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openFile', 'multiSelections'],
+    properties: ["openFile", "multiSelections"],
     filters: [
-      { name: 'Media Files', extensions: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'mp4', 'mkv', 'mov', 'avi', 'webm', 'm4a'] },
-      { name: 'All Files', extensions: ['*'] },
+      {
+        name: "Media Files",
+        extensions: [
+          "mp3",
+          "wav",
+          "flac",
+          "aac",
+          "ogg",
+          "mp4",
+          "mkv",
+          "mov",
+          "avi",
+          "webm",
+          "m4a",
+        ],
+      },
+      { name: "All Files", extensions: ["*"] },
     ],
   });
 
@@ -99,38 +118,57 @@ ipcMain.handle('open-file-dialog', async () => {
 });
 
 // IPC: Read file as ArrayBuffer
-ipcMain.handle('read-file', async (_event, filePath) => {
+ipcMain.handle("read-file", async (_event, filePath) => {
   const buffer = await fs.promises.readFile(filePath);
-  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+  return buffer.buffer.slice(
+    buffer.byteOffset,
+    buffer.byteOffset + buffer.byteLength,
+  );
 });
 
 // IPC: Extract a specific audio stream to WAV using ffmpeg
-ipcMain.handle('extract-audio-stream', async (_event, filePath, streamIndex) => {
-  // Use ffmpeg-static binary
-  const tmpPath = path.join(app.getPath('temp'), `channel-router-stream-${streamIndex}-${Date.now()}.wav`);
+ipcMain.handle(
+  "extract-audio-stream",
+  async (_event, filePath, streamIndex) => {
+    // Use ffmpeg-static binary
+    const tmpPath = path.join(
+      app.getPath("temp"),
+      `channel-router-stream-${streamIndex}-${Date.now()}.wav`,
+    );
 
-  return new Promise((resolve, reject) => {
-    const args = [
-      '-y',
-      '-i', filePath,
-      '-map', `0:${streamIndex}`,
-      '-acodec', 'pcm_s16le',
-      '-ar', '48000',
-      tmpPath,
-    ];
+    return new Promise((resolve, reject) => {
+      const args = [
+        "-y",
+        "-i",
+        filePath,
+        "-map",
+        `0:${streamIndex}`,
+        "-acodec",
+        "pcm_s16le",
+        "-ar",
+        "48000",
+        tmpPath,
+      ];
 
-    execFile(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 10 }, (err) => {
-      if (err) {
-        reject(new Error(`ffmpeg extract error: ${err.message}`));
-        return;
-      }
-      fs.promises.readFile(tmpPath)
-        .then(buffer => {
-          // Clean up temp file
-          fs.promises.unlink(tmpPath).catch(() => {});
-          resolve(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
-        })
-        .catch(reject);
+      execFile(ffmpegPath, args, { maxBuffer: 1024 * 1024 * 10 }, (err) => {
+        if (err) {
+          reject(new Error(`ffmpeg extract error: ${err.message}`));
+          return;
+        }
+        fs.promises
+          .readFile(tmpPath)
+          .then((buffer) => {
+            // Clean up temp file
+            fs.promises.unlink(tmpPath).catch(() => {});
+            resolve(
+              buffer.buffer.slice(
+                buffer.byteOffset,
+                buffer.byteOffset + buffer.byteLength,
+              ),
+            );
+          })
+          .catch(reject);
+      });
     });
-  });
-});
+  },
+);

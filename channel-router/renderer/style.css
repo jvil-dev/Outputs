@@ -74,6 +74,7 @@ header h1 {
 
 /* Video */
 #video-container {
+  position: relative;
   background: #000;
   border-radius: 6px;
   overflow: hidden;
@@ -92,6 +93,55 @@ header h1 {
   width: 100%;
   max-height: 300px;
   object-fit: contain;
+}
+
+#btn-fullscreen {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(23, 22, 21, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 4px 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.15s, background 0.15s;
+  z-index: 1;
+}
+
+#video-container:hover #btn-fullscreen {
+  opacity: 1;
+}
+
+#btn-fullscreen:hover {
+  color: var(--text);
+  background: rgba(37, 34, 32, 0.9);
+  border-color: var(--accent-a);
+}
+
+/* Fullscreen state */
+#video-container:fullscreen,
+#video-container:-webkit-full-screen {
+  max-height: none;
+  border: none;
+  border-radius: 0;
+}
+
+#video-container:fullscreen #video-player,
+#video-container:-webkit-full-screen #video-player {
+  max-height: none;
+  height: 100%;
+  object-fit: contain;
+}
+
+#video-container:fullscreen #btn-fullscreen,
+#video-container:-webkit-full-screen #btn-fullscreen {
+  bottom: 16px;
+  right: 16px;
+  font-size: 16px;
+  padding: 6px 10px;
 }
 
 /* Transport */
@@ -313,6 +363,75 @@ header h1 {
   min-width: 42px;
   text-align: right;
   font-family: "IBM Plex Mono", monospace;
+}
+
+/* Latency monitor */
+#latency-monitor {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 6px 12px;
+  background: var(--bg-warm);
+  border: 1px solid var(--border-dim);
+  border-radius: 6px;
+  box-shadow: var(--inset-shadow);
+}
+
+.latency-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+}
+
+.latency-a { color: var(--accent-a); }
+.latency-b { color: var(--accent-b); }
+
+.latency-label {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 10px;
+}
+
+.latency-value {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.latency-delta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-dim);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.latency-delta-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.latency-delta-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.latency-delta-value.synced {
+  color: #6abf69;
+}
+
+.latency-delta-value.offset {
+  color: var(--accent-a);
 }
 
 /* Channel list */
